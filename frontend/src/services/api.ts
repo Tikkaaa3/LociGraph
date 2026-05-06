@@ -110,3 +110,7 @@ export const streamApi = {
 };
 
 export { apiClient };
+
+export const createConversation = conversationsApi.create;
+export const getMessages = messagesApi.list;
+export const sendMessage = messagesApi.send;
