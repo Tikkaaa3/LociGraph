@@ -1,12 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ChatPanel from "./components/ChatPanel";
 import { api } from "./services/api";
 
 export default function App() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const created = useRef(false);
 
   useEffect(() => {
+    if (created.current) return;
+    created.current = true;
     api.post("/conversations", { title: "New Chat" })
       .then((res) => setConversationId(res.data.id))
       .catch(() => setError("Unable to start a new conversation"));

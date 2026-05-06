@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from "react";
 import { api } from "../services/api";
-import { Message, Role } from "../types/chat";
+import { Role } from "../types/chat";
+import type { Message } from "../types/chat";
 
 interface ChatPanelProps {
   conversationId: string;
@@ -68,7 +69,7 @@ export default function ChatPanel({ conversationId }: ChatPanelProps) {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <div className="flex flex-col h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-left">
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.role === Role.USER ? "justify-end" : "justify-start"}`}>
