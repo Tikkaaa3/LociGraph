@@ -1,4 +1,5 @@
-import axios, { AxiosError, AxiosInstance } from "axios";
+import axios, { AxiosError } from "axios";
+import type { AxiosInstance } from "axios";
 import type {
   Conversation,
   ConversationCreate,
