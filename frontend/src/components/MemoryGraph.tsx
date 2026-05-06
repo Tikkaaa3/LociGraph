@@ -55,6 +55,7 @@ export default function MemoryGraph() {
   const nodeCanvasObject = useCallback(
     (node: FGNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
       if (node.x == null || node.y == null) return;
+      if (!ctx || typeof ctx.beginPath !== "function") return;
       const now = performance.now();
       const hop = delaysRef.current.get(node.id) ?? 0;
       const delayMs = hop * 120;
@@ -104,6 +105,7 @@ export default function MemoryGraph() {
   const nodePointerAreaPaint = useCallback(
     (node: FGNode, ctx: CanvasRenderingContext2D) => {
       if (node.x == null || node.y == null) return;
+      if (!ctx || typeof ctx.beginPath !== "function") return;
       const now = performance.now();
       const hop = delaysRef.current.get(node.id) ?? 0;
       const delayMs = hop * 120;
