@@ -50,17 +50,38 @@ def _cosine_similarity(a: List[float], b: List[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
-def score_chunk_semantic(query: str, chunk: dict) -> float:
-    query_emb = get_embedding(query)
+def score_chunk_semantic(query: str, chunk: dict, query_emb: list[float] | None = None) -> float:
+    if query_emb is None:
+        query_emb = get_embedding(query)
     chunk_emb = chunk["embedding"]
     return _cosine_similarity(query_emb, chunk_emb)
 
 
-def score_chunk(query: str, chunk: dict, mode: str = "keyword") -> float:
+# Hybrid scoring fuses exact lexical overlap with conceptual embedding similarity.
+# Keywords anchor results to explicit terms, while embeddings capture synonyms,
+# paraphrases, and semantic relatives that keyword counts alone would miss.
+# The 0.4 / 0.6 weighting prioritizes semantic meaning without discarding
+# the precision of exact keyword matches.
+def score_chunk(query: str, chunk: dict, mode: str = "keyword", query_emb: list[float] | None = None) -> float:
     if mode == "semantic":
-        return score_chunk_semantic(query, chunk)
+        return score_chunk_semantic(query, chunk, query_emb)
+
     keywords = query.lower().split()
     text = chunk["content"].lower()
+
+    if mode == "hybrid":
+        # Normalize keyword overlap to [0, 1]
+        matches = sum(1 for kw in keywords if kw in text)
+        keyword_score = matches / len(keywords) if keywords else 0.0
+
+        # Normalize semantic cosine similarity from [-1, 1] → [0, 1]
+        raw_semantic = score_chunk_semantic(query, chunk, query_emb)
+        semantic_score = (raw_semantic + 1) / 2
+
+        # Weighted fusion: prioritize semantic meaning (60 %) while preserving keyword signal (40 %)
+        return (0.4 * keyword_score) + (0.6 * semantic_score)
+
+    # Legacy keyword mode — unchanged raw-count behavior
     return float(sum(1 for kw in keywords if kw in text))
 
 
@@ -69,10 +90,14 @@ def retrieve_documents(query: str, top_k: int = 3, mode: str = "keyword") -> Lis
     if not query or not chunks:
         return []
 
-    scored = []
+    # Compute once and reuse for semantic/hybrid scoring
+    query_emb = None
+    if mode in ("semantic", "hybrid"):
+        query_emb = get_embedding(query)
 
+    scored = []
     for chunk in chunks.values():
-        score = score_chunk(query, chunk, mode=mode)
+        score = score_chunk(query, chunk, mode=mode, query_emb=query_emb)
         if score > 0:
             scored.append((score, chunk))
 
