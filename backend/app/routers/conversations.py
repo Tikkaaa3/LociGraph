@@ -92,9 +92,9 @@ async def create_message(conversation_id: UUID, body: models.MessageCreate):
     )
     _messages[conversation_id].append(user_msg)
 
-    assistant_msg = await generate_reply(conversation_id, body.content)
+    # Pass full conversation history (oldest → newest)
+    assistant_msg = await generate_reply(conversation_id, _messages[conversation_id])
     _messages[conversation_id].append(assistant_msg)
     _conversations[conversation_id]["updated_at"] = assistant_msg.created_at
 
-    # Return the assistant message (client already knows the user payload)
     return assistant_msg
