@@ -1,6 +1,7 @@
-import { useEffect, useRef, useMemo, useCallback } from "react";
+import { useRef, useMemo, useCallback } from "react";
 import ForceGraph2D from "react-force-graph-2d";
 import { useGraph } from "../context/GraphContext";
+import { useMemoryReplay } from "../hooks/useMemoryReplay";
 import type { GraphNodeData, GraphLinkData } from "../types/graph";
 
 interface FGNode extends GraphNodeData {
@@ -9,48 +10,17 @@ interface FGNode extends GraphNodeData {
 }
 
 export default function MemoryGraph() {
-  const { graphData, selectNode } = useGraph();
+  const { selectNode, activeSessionId, triggerReplay } = useGraph();
+  const { startTimeRef, delaysRef, activeNodes, activeLinks, hasData } =
+    useMemoryReplay(activeSessionId);
   const fgRef = useRef<any>(null);
-  const startTimeRef = useRef<number>(0);
-  const delaysRef = useRef<Map<string, number>>(new Map());
 
   const fgData = useMemo(() => {
     return {
-      nodes: graphData.nodes.map((n) => ({ ...n })),
-      links: graphData.links.map((l) => ({ ...l })),
+      nodes: activeNodes.map((n) => ({ ...n })),
+      links: activeLinks.map((l) => ({ ...l })),
     };
-  }, [graphData]);
-
-  useEffect(() => {
-    if (fgData.nodes.length === 0) return;
-
-    const delays = new Map<string, number>();
-    const seedNode = fgData.nodes.reduce(
-      (max, n) => (n.activation > max.activation ? n : max),
-      fgData.nodes[0],
-    );
-    const queue: string[] = [seedNode.id];
-    delays.set(seedNode.id, 0);
-    const visited = new Set<string>([seedNode.id]);
-
-    while (queue.length > 0) {
-      const currentId = queue.shift()!;
-      const currentHop = delays.get(currentId)!;
-      const currentNode = fgData.nodes.find((n) => n.id === currentId);
-      if (!currentNode) continue;
-
-      for (const neighborId of Object.keys(currentNode.edges || {})) {
-        if (!visited.has(neighborId)) {
-          visited.add(neighborId);
-          delays.set(neighborId, currentHop + 1);
-          queue.push(neighborId);
-        }
-      }
-    }
-
-    delaysRef.current = delays;
-    startTimeRef.current = performance.now();
-  }, [fgData]);
+  }, [activeNodes, activeLinks]);
 
   const nodeCanvasObject = useCallback(
     (node: FGNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -61,7 +31,7 @@ export default function MemoryGraph() {
       const delayMs = hop * 120;
       const progress = Math.min(
         1,
-        Math.max(0, (now - startTimeRef.current - delayMs) / 800),
+        Math.max(0, (now - startTimeRef.current - delayMs) / 800)
       );
       const ease = 1 - Math.pow(1 - progress, 3);
       const act = node.activation * ease;
@@ -95,11 +65,11 @@ export default function MemoryGraph() {
         ctx.fillText(
           node.id.slice(0, 8),
           node.x,
-          node.y + radius + 12 / globalScale,
+          node.y + radius + 12 / globalScale
         );
       }
     },
-    [],
+    []
   );
 
   const nodePointerAreaPaint = useCallback(
@@ -111,7 +81,7 @@ export default function MemoryGraph() {
       const delayMs = hop * 120;
       const progress = Math.min(
         1,
-        Math.max(0, (now - startTimeRef.current - delayMs) / 800),
+        Math.max(0, (now - startTimeRef.current - delayMs) / 800)
       );
       const ease = 1 - Math.pow(1 - progress, 3);
       const act = node.activation * ease;
@@ -122,20 +92,17 @@ export default function MemoryGraph() {
       ctx.fillStyle = "rgba(0,0,0,0)";
       ctx.fill();
     },
-    [],
+    []
   );
 
-  const linkWidth = useCallback(
-    (link: any) => Math.max(0.5, link.weight * 3),
-    [],
-  );
+  const linkWidth = useCallback((link: any) => Math.max(0.5, link.weight * 3), []);
   const linkColor = useCallback((link: any) => {
     if (link.weight > 0.6) return "rgba(34,211,238,0.5)";
     if (link.weight >= 0.3) return "rgba(59,130,246,0.3)";
     return "rgba(107,114,128,0.15)";
   }, []);
 
-  if (fgData.nodes.length === 0) {
+  if (!hasData) {
     return (
       <div className="w-full h-full flex items-center justify-center text-gray-500 bg-gray-950">
         Send a message to see memory activation
@@ -146,9 +113,7 @@ export default function MemoryGraph() {
   return (
     <div className="w-full h-full relative bg-gray-950">
       <button
-        onClick={() => {
-          startTimeRef.current = performance.now();
-        }}
+        onClick={triggerReplay}
         className="absolute top-4 left-4 z-10 px-3 py-1.5 text-xs font-medium text-gray-300 bg-gray-800/80 hover:bg-gray-700 rounded-md border border-gray-700 transition-colors"
       >
         Replay

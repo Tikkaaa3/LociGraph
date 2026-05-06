@@ -16,3 +16,11 @@ export interface GraphData {
   nodes: GraphNodeData[];
   links: GraphLinkData[];
 }
+
+export interface MemorySession {
+  id: string;
+  query: string;
+  timestamp: number;
+  nodes: GraphNodeData[];
+  links: GraphLinkData[];
+}
