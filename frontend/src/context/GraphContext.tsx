@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, ReactNode } from "react";
-import { GraphData } from "../types/graph";
+import type { GraphData } from "../types/graph";
 
 interface GraphContextType {
   graphData: GraphData;
