@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from ..models import MessageResponse, Role
+from .documents import retrieve_documents
 
 
 def extract_query(messages: List[MessageResponse]) -> str:
@@ -14,12 +15,7 @@ def extract_query(messages: List[MessageResponse]) -> str:
 
 
 def retrieve_context(query: str) -> List[dict]:
-    """Mock retrieval step: returns placeholder documents for the query."""
-    # Future: replace with vector DB / embedding search
-    return [
-        {"id": "doc1", "content": "Python is a programming language."},
-        {"id": "doc2", "content": "It is often used for backend development."},
-    ]
+    return retrieve_documents(query)
 
 
 def build_prompt(messages: List[MessageResponse], retrieved_context: List[dict]) -> str:
