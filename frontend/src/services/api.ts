@@ -7,6 +7,14 @@ import type {
   MessageCreate,
 } from "../types/chat";
 
+export interface GraphNodeResponse {
+  id: string;
+  content: string;
+  activation: number;
+  edges: Record<string, number>;
+  top_neighbors?: { id: string; weight: number }[];
+}
+
 const API_BASE_URL = "http://localhost:8000";
 
 /* ---------- Error handling ---------- */
@@ -70,6 +78,15 @@ export const messagesApi = {
   send: (conversationId: string, body: MessageCreate) =>
     apiClient
       .post<Message>(`/conversations/${conversationId}/messages`, body)
+      .then((r) => r.data),
+};
+
+export const documentsApi = {
+  graphSearch: (query: string) =>
+    apiClient
+      .get<GraphNodeResponse[]>("/documents/retrieve", {
+        params: { q: query, mode: "graph" },
+      })
       .then((r) => r.data),
 };
 

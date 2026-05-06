@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from "react";
-import { messagesApi } from "../services/api";
+import { messagesApi, documentsApi } from "../services/api";
 import { Role } from "../types/chat";
 import type { Message } from "../types/chat";
+import type { GraphLinkData } from "../types/graph";
+import { useGraph } from "../context/GraphContext";
 
 interface ChatPanelProps {
   conversationId: string;
@@ -13,6 +15,7 @@ export default function ChatPanel({ conversationId }: ChatPanelProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { updateGraph } = useGraph();
 
   useEffect(() => {
     let cancelled = false;
@@ -37,6 +40,25 @@ export default function ChatPanel({ conversationId }: ChatPanelProps) {
   const handleSend = async () => {
     const text = input.trim();
     if (!text || loading) return;
+
+    // Trigger memory graph visualization
+    documentsApi.graphSearch(text).then((nodes) => {
+      const links: GraphLinkData[] = [];
+      const seen = new Set<string>();
+      for (const n of nodes) {
+        for (const [targetId, weight] of Object.entries(n.edges || {})) {
+          if (targetId === n.id) continue;
+          const key = [n.id, targetId].sort().join("-");
+          if (!seen.has(key)) {
+            seen.add(key);
+            links.push({ source: n.id, target: targetId, weight });
+          }
+        }
+      }
+      updateGraph({ nodes, links }, text);
+    }).catch(() => {
+      // Graph is best-effort; chat must survive failures
+    });
 
     const optimistic: Message = {
       id: `temp-${Date.now()}`,
@@ -76,7 +98,7 @@ export default function ChatPanel({ conversationId }: ChatPanelProps) {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-left">
+    <div className="flex flex-col h-full bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-left">
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.role === Role.USER ? "justify-end" : "justify-start"}`}>
