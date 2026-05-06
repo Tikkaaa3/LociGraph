@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from "react";
-import { api } from "../services/api";
+import { messagesApi } from "../services/api";
 import { Role } from "../types/chat";
 import type { Message } from "../types/chat";
 
@@ -17,11 +17,17 @@ export default function ChatPanel({ conversationId }: ChatPanelProps) {
   useEffect(() => {
     let cancelled = false;
     setError(null);
-    api
-      .get<Message[]>(`/conversations/${conversationId}/messages`)
-      .then((res) => { if (!cancelled) setMessages(res.data); })
-      .catch((err) => { if (!cancelled) setError(err.response?.data?.detail || "Failed to load messages"); });
-    return () => { cancelled = true; };
+    messagesApi
+      .list(conversationId)
+      .then((data) => {
+        if (!cancelled) setMessages(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || "Failed to load messages");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [conversationId]);
 
   useEffect(() => {
@@ -38,6 +44,7 @@ export default function ChatPanel({ conversationId }: ChatPanelProps) {
       role: Role.USER,
       content: text,
       created_at: new Date().toISOString(),
+      sources: [],
     };
 
     setMessages((prev) => [...prev, optimistic]);
@@ -46,17 +53,17 @@ export default function ChatPanel({ conversationId }: ChatPanelProps) {
     setError(null);
 
     try {
-      const { data: assistantMsg } = await api.post<Message>(
-        `/conversations/${conversationId}/messages`,
-        { role: Role.USER, content: text }
-      );
+      const assistantMsg = await messagesApi.send(conversationId, {
+        role: Role.USER,
+        content: text,
+      });
       setMessages((prev) =>
         prev
           .filter((m) => m.id !== optimistic.id)
           .concat(optimistic, assistantMsg)
       );
     } catch (err: any) {
-      setError(err.response?.data?.detail || "Failed to send message");
+      setError(err.message || "Failed to send message");
       setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
     } finally {
       setLoading(false);
