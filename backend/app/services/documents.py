@@ -7,6 +7,9 @@ from uuid import uuid4
 # Internal store for document chunks
 chunks: Dict[str, dict] = {}
 
+# Similarity threshold for graph edge creation
+SIMILARITY_THRESHOLD = 0.6
+
 
 def _chunk_text(text: str, chunk_size: int = 300) -> List[str]:
     return [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)]
@@ -46,11 +49,19 @@ def get_embedding(text: str, dims: int = 64) -> List[float]:
 
 def build_graph_connections(new_chunk: dict) -> None:
     """Wire a new memory node into the existing graph via semantic similarity."""
+    new_len = len(new_chunk["content"])
+    
     for existing_id, existing in chunks.items():
         if existing_id == new_chunk["id"]:
             continue
+            
+        # Lightweight pre-filter: skip if text lengths differ by more than 50%
+        # of the average chunk size, as vastly different chunks rarely exceed threshold.
+        if abs(new_len - len(existing["content"])) > 150:
+            continue
+            
         raw_sim = _cosine_similarity(new_chunk["embedding"], existing["embedding"])
-        if raw_sim > 0.6:
+        if raw_sim > SIMILARITY_THRESHOLD:
             weight = (raw_sim + 1) / 2  # normalize cosine → [0, 1]
             new_chunk["edges"][existing_id] = weight
             existing.setdefault("edges", {})[new_chunk["id"]] = weight
@@ -113,34 +124,56 @@ def _retrieve_scored(
     return scored
 
 
-def activate_nodes(query: str, top_k: int = 5) -> List[dict]:
+def activate_nodes(query: str, top_k: int = 5, hops: int = 2) -> List[dict]:
     """
     Seed node activation via hybrid retrieval, then propagate signals
-    across 1 graph hop with a 0.5 decay factor.
+    across multiple graph hops with decay.
     """
-    # Reset firing state
-    for chunk in chunks.values():
-        chunk["activation"] = 0.0
+    # FIX 2: Use local activation state instead of mutating global chunks
+    activation_state: Dict[str, float] = {}
 
     # Seed nodes: top-k by hybrid score
     query_emb = get_embedding(query)
     seeds = _retrieve_scored(query, "hybrid", query_emb)[:top_k]
 
-    activated = []
+    frontier: list[str] = []
     for score, chunk in seeds:
-        chunk["activation"] = min(1.0, max(0.0, score))
-        activated.append(chunk)
+        activation = min(1.0, max(0.0, score))
+        activation_state[chunk["id"]] = activation
+        frontier.append(chunk["id"])
 
-    # Propagate 1 hop with decay, clamping to [0, 1]
-    for chunk in activated:
-        for neighbor_id, weight in chunk.get("edges", {}).items():
-            neighbor = chunks.get(neighbor_id)
-            if neighbor is None:
+    # FIX 4: Multi-hop propagation with bounded hop count (prevents infinite loops)
+    for hop in range(1, hops + 1):
+        decay = 0.5 ** hop
+        next_frontier: set[str] = set()
+        for node_id in frontier:
+            node = chunks.get(node_id)
+            if node is None:
                 continue
-            added = weight * chunk["activation"] * 0.5
-            neighbor["activation"] = min(1.0, neighbor["activation"] + added)
+            current_activation = activation_state.get(node_id, 0.0)
+            if current_activation == 0.0:
+                continue
+            for neighbor_id, weight in node.get("edges", {}).items():
+                added = weight * current_activation * decay
+                neighbor_activation = activation_state.get(neighbor_id, 0.0)
+                new_activation = min(1.0, neighbor_activation + added)
+                activation_state[neighbor_id] = new_activation
+                next_frontier.add(neighbor_id)
+        frontier = list(next_frontier)
 
-    result = [c for c in chunks.values() if c["activation"] > 0]
+    # FIX 5: Normalize activations across the graph
+    if activation_state:
+        max_activation = max(activation_state.values())
+        if max_activation > 0:
+            for cid in activation_state:
+                activation_state[cid] = min(1.0, activation_state[cid] / max_activation)
+
+    # Build results without mutating stored chunks
+    result = []
+    for c in chunks.values():
+        act = activation_state.get(c["id"], 0.0)
+        if act > 0:
+            result.append({**c, "activation": act})
     result.sort(key=lambda x: x["activation"], reverse=True)
     return result
 
@@ -152,14 +185,18 @@ def retrieve_documents(query: str, top_k: int = 3, mode: str = "keyword") -> Lis
 
     if mode == "graph":
         activated = activate_nodes(query, top_k=top_k)
-        for chunk in activated:
+        result = []
+        for chunk in activated[:top_k]:
+            # FIX 3: Create a copy before attaching metadata to prevent mutation
+            chunk_copy = dict(chunk)
             top = sorted(
-                chunk.get("edges", {}).items(), key=lambda x: x[1], reverse=True
+                chunk_copy.get("edges", {}).items(), key=lambda x: x[1], reverse=True
             )[:3]
-            chunk["top_neighbors"] = [
+            chunk_copy["top_neighbors"] = [
                 {"id": nid, "weight": round(w, 4)} for nid, w in top
             ]
-        return activated[:top_k]
+            result.append(chunk_copy)
+        return result
 
     query_emb = None
     if mode in ("semantic", "hybrid"):
