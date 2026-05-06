@@ -8,3 +8,9 @@ dist
 
 # env
 .env
+
+.graphifyignore
+AGENTS.md
+CONVENTIONS.md
+firecrawl_skill.md
+graphify-out/
