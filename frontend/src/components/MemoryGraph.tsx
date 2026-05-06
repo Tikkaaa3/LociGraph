@@ -107,12 +107,12 @@ export default function MemoryGraph() {
   }, []);
 
   const handleNodeHover = useCallback((node: FGNode | null) => {
-    console.log("hover", node);
+    console.log("hover", node?.id);
     setHoveredNode(node);
   }, []);
 
   const handleNodeClick = useCallback((node: FGNode) => {
-    console.log("click", node);
+    console.log("click", node?.id);
     selectNode(node.id);
   }, [selectNode]);
 
