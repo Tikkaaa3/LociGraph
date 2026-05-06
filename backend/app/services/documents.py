@@ -32,17 +32,22 @@ def add_document(content: str) -> List[dict]:
     return chunk_results
 
 
+def score_chunk(query: str, chunk: dict) -> int:
+    # Future: replace score_chunk with embedding similarity function
+    keywords = query.lower().split()
+    text = chunk["content"].lower()
+    return sum(1 for kw in keywords if kw in text)
+
+
 def retrieve_documents(query: str, top_k: int = 3) -> List[dict]:
     """Retrieve top-k chunks matching the query keywords."""
     if not query or not chunks:
         return []
 
-    keywords = set(query.lower().split())
     scored = []
 
     for chunk in chunks.values():
-        text = chunk["content"].lower()
-        score = sum(1 for kw in keywords if kw in text)
+        score = score_chunk(query, chunk)
         if score:
             scored.append((score, chunk))
 
