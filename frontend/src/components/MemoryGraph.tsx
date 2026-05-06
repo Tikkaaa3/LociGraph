@@ -51,28 +51,12 @@ export default function MemoryGraph() {
       ctx.beginPath();
       ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
       ctx.fillStyle = color;
+      ctx.fill();
 
       if (isSelected) {
-        ctx.shadowBlur = 25;
-        ctx.shadowColor = "#ffffff";
-        ctx.fill();
-        ctx.shadowBlur = 0;
         ctx.strokeStyle = "rgba(255,255,255,0.9)";
         ctx.lineWidth = 1.5;
         ctx.stroke();
-      } else if (isHovered) {
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = color;
-        ctx.fill();
-        ctx.shadowBlur = 0;
-      } else if (act > 0.6) {
-        const pulse = act > 0.8 ? 15 + Math.sin(performance.now() / 150) * 5 : 10;
-        ctx.shadowBlur = pulse;
-        ctx.shadowColor = color;
-        ctx.fill();
-        ctx.shadowBlur = 0;
-      } else {
-        ctx.fill();
       }
 
       if (act > 0.5 || isSelected || isHovered) {
@@ -105,7 +89,7 @@ export default function MemoryGraph() {
 
       let radius = Math.max(2, act * 10);
       if (isSelected) radius *= 1.3;
-      radius = Math.max(radius + 4, 10);
+      radius = Math.max(radius + 12, 22);
 
       ctx.beginPath();
       ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
@@ -123,8 +107,14 @@ export default function MemoryGraph() {
   }, []);
 
   const handleNodeHover = useCallback((node: FGNode | null) => {
+    console.log("hover", node);
     setHoveredNode(node);
   }, []);
+
+  const handleNodeClick = useCallback((node: FGNode) => {
+    console.log("click", node);
+    selectNode(node.id);
+  }, [selectNode]);
 
   const handleBackgroundClick = useCallback(() => {
     selectNode(null);
@@ -143,6 +133,20 @@ export default function MemoryGraph() {
       className="w-full h-full relative bg-gray-950"
       style={{ cursor: hoveredNode ? "pointer" : "default" }}
     >
+      {/* Debug state readout */}
+      <div className="absolute top-4 left-4 z-50 bg-black/80 text-green-400 font-mono text-xs p-2 rounded pointer-events-none space-y-0.5">
+        <div>DEBUG</div>
+        <div>hovered: {hoveredNode?.id ?? "null"}</div>
+        <div>selected: {selectedNodeId ?? "null"}</div>
+        <div>tooltip: {tooltipNode ? "true" : "false"}</div>
+        <div>nodes: {fgData.nodes.length}</div>
+      </div>
+
+      {/* Hardcoded render test */}
+      <div className="absolute top-4 right-4 z-50 bg-red-600 text-white p-4 rounded pointer-events-none">
+        TEST PANEL
+      </div>
+
       <ForceGraph2D
         ref={fgRef}
         graphData={fgData}
@@ -151,7 +155,7 @@ export default function MemoryGraph() {
         nodePointerAreaPaint={nodePointerAreaPaint}
         linkWidth={linkWidth}
         linkColor={linkColor}
-        onNodeClick={(node: FGNode) => selectNode(node.id)}
+        onNodeClick={handleNodeClick}
         onNodeHover={handleNodeHover}
         onBackgroundClick={handleBackgroundClick}
         cooldownTicks={100}
@@ -159,7 +163,7 @@ export default function MemoryGraph() {
         d3VelocityDecay={0.3}
       />
       {tooltipNode && (
-        <div className="absolute top-4 right-4 z-30 w-64 max-h-96 overflow-y-auto bg-gray-900/90 border border-gray-700 rounded-md p-3 text-xs text-gray-200 pointer-events-none shadow-lg backdrop-blur-sm">
+        <div className="absolute top-4 right-4 z-50 w-64 max-h-96 overflow-y-auto bg-gray-900/90 border border-gray-700 rounded-md p-3 text-xs text-gray-200 pointer-events-none shadow-lg backdrop-blur-sm">
           <div className="font-mono text-gray-400 mb-1 break-all">
             {tooltipNode.id}
           </div>
