@@ -1,3 +1,5 @@
+import hashlib
+import math
 from datetime import datetime, timezone
 from typing import Dict, List
 from uuid import uuid4
@@ -23,6 +25,7 @@ def add_document(content: str) -> List[dict]:
             "id": chunk_id,
             "doc_id": doc_id,
             "content": chunk_content,
+            "embedding": get_embedding(chunk_content),
             "created_at": created_at,
             "chunk_index": i,
         }
@@ -32,14 +35,36 @@ def add_document(content: str) -> List[dict]:
     return chunk_results
 
 
-def score_chunk(query: str, chunk: dict) -> int:
-    # Future: replace score_chunk with embedding similarity function
+def get_embedding(text: str, dims: int = 64) -> List[float]:
+    """Deterministic mock embedding from text hash."""
+    digest = hashlib.md5(text.encode("utf-8")).digest()
+    return [(digest[i % len(digest)] / 255.0) * 2 - 1 for i in range(dims)]
+
+
+def _cosine_similarity(a: List[float], b: List[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    norm_a = math.sqrt(sum(x * x for x in a))
+    norm_b = math.sqrt(sum(x * x for x in b))
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def score_chunk_semantic(query: str, chunk: dict) -> float:
+    query_emb = get_embedding(query)
+    chunk_emb = chunk["embedding"]
+    return _cosine_similarity(query_emb, chunk_emb)
+
+
+def score_chunk(query: str, chunk: dict, mode: str = "keyword") -> float:
+    if mode == "semantic":
+        return score_chunk_semantic(query, chunk)
     keywords = query.lower().split()
     text = chunk["content"].lower()
-    return sum(1 for kw in keywords if kw in text)
+    return float(sum(1 for kw in keywords if kw in text))
 
 
-def retrieve_documents(query: str, top_k: int = 3) -> List[dict]:
+def retrieve_documents(query: str, top_k: int = 3, mode: str = "keyword") -> List[dict]:
     """Retrieve top-k chunks matching the query keywords."""
     if not query or not chunks:
         return []
@@ -47,8 +72,8 @@ def retrieve_documents(query: str, top_k: int = 3) -> List[dict]:
     scored = []
 
     for chunk in chunks.values():
-        score = score_chunk(query, chunk)
-        if score:
+        score = score_chunk(query, chunk, mode=mode)
+        if score > 0:
             scored.append((score, chunk))
 
     scored.sort(key=lambda x: x[0], reverse=True)
