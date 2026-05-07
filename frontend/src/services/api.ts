@@ -98,6 +98,11 @@ export const documentsApi = {
         params: { q: query, mode: "graph" },
       })
       .then((r) => r.data),
+  uploadPdf: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiClient.post("/pdf/upload", formData).then((r) => r.data);
+  },
 };
 
 /* ---------- Streaming placeholders ---------- */

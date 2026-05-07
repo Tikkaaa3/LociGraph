@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .exceptions import register_exception_handlers
 from .routers.conversations import router as conversations_router
-from .routers.documents import router as documents_router
+from .routers.documents import pdf_router, router as documents_router
 
 app = FastAPI(title="LociGraph")
 
@@ -24,6 +24,7 @@ app.add_middleware(
 )
 app.include_router(conversations_router)
 app.include_router(documents_router)
+app.include_router(pdf_router)
 register_exception_handlers(app)
 
 

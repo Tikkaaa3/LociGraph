@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from "react";
+import { useState, useRef, useEffect, FormEvent, KeyboardEvent, ChangeEvent } from "react";
 import { messagesApi, documentsApi } from "../services/api";
 import { Role } from "../types/chat";
 import type { Message } from "../types/chat";
@@ -16,6 +16,8 @@ export default function ChatPanel({ conversationId }: ChatPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { updateGraph } = useGraph();
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -97,6 +99,40 @@ export default function ChatPanel({ conversationId }: ChatPanelProps) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
+  const triggerFileInput = () => fileInputRef.current?.click();
+
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setError(null);
+
+    try {
+      const nodes = await documentsApi.uploadPdf(file);
+
+      const links: GraphLinkData[] = [];
+      const seen = new Set<string>();
+      for (const n of nodes) {
+        for (const [targetId, weight] of Object.entries(n.edges || {})) {
+          if (targetId === n.id) continue;
+          const key = [n.id, targetId].sort().join("-");
+          if (!seen.has(key)) {
+            seen.add(key);
+            links.push({ source: n.id, target: targetId, weight });
+          }
+        }
+      }
+
+      updateGraph({ nodes, links }, `PDF: ${file.name}`);
+    } catch (err: any) {
+      setError(err.message || "Failed to upload PDF");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-left">
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
@@ -135,6 +171,21 @@ export default function ChatPanel({ conversationId }: ChatPanelProps) {
 
       <form onSubmit={onSubmit} className="border-t border-gray-200 dark:border-gray-800 px-4 py-3 bg-white dark:bg-gray-900">
         <div className="flex gap-2 max-w-4xl mx-auto">
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="application/pdf"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={triggerFileInput}
+            disabled={uploading || loading}
+            className="shrink-0 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 dark:text-gray-200 text-sm font-medium px-3 py-2 rounded-lg transition-colors"
+          >
+            {uploading ? "…" : "PDF"}
+          </button>
           <input
             type="text"
             value={input}
