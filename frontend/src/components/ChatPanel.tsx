@@ -1,4 +1,11 @@
-import { useState, useRef, useEffect, FormEvent, KeyboardEvent, ChangeEvent } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  FormEvent,
+  KeyboardEvent,
+  ChangeEvent,
+} from "react";
 import { messagesApi, documentsApi } from "../services/api";
 import { Role } from "../types/chat";
 import type { Message } from "../types/chat";
@@ -36,7 +43,10 @@ export default function ChatPanel({ conversationId }: ChatPanelProps) {
   }, [conversationId]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "end",
+    });
   }, [messages, loading]);
 
   const handleSend = async () => {
@@ -44,23 +54,38 @@ export default function ChatPanel({ conversationId }: ChatPanelProps) {
     if (!text || loading) return;
 
     // Trigger memory graph visualization
-    documentsApi.graphSearch(text).then((nodes) => {
-      const links: GraphLinkData[] = [];
-      const seen = new Set<string>();
-      for (const n of nodes) {
-        for (const [targetId, weight] of Object.entries(n.edges || {})) {
-          if (targetId === n.id) continue;
-          const key = [n.id, targetId].sort().join("-");
-          if (!seen.has(key)) {
-            seen.add(key);
-            links.push({ source: n.id, target: targetId, weight });
+    documentsApi
+      .graphSearch(text)
+      .then((nodes) => {
+        // SAFETY CHECK: Create a Set of valid node IDs
+        const validNodeIds = new Set(nodes.map((n) => n.id));
+
+        const links: GraphLinkData[] = [];
+        const seen = new Set<string>();
+
+        for (const n of nodes) {
+          for (const [targetId, weight] of Object.entries(n.edges || {})) {
+            if (targetId === n.id) continue;
+
+            // SAFETY CHECK: Skip links that point to missing nodes
+            if (!validNodeIds.has(targetId)) continue;
+
+            const key = [n.id, targetId].sort().join("-");
+            if (!seen.has(key)) {
+              seen.add(key);
+              links.push({
+                source: n.id,
+                target: targetId,
+                weight: weight as number,
+              });
+            }
           }
         }
-      }
-      updateGraph({ nodes, links }, text);
-    }).catch(() => {
-      // Graph is best-effort; chat must survive failures
-    });
+        updateGraph({ nodes, links }, text);
+      })
+      .catch(() => {
+        // Graph is best-effort; chat must survive failures
+      });
 
     const optimistic: Message = {
       id: `temp-${Date.now()}`,
@@ -84,7 +109,7 @@ export default function ChatPanel({ conversationId }: ChatPanelProps) {
       setMessages((prev) =>
         prev
           .filter((m) => m.id !== optimistic.id)
-          .concat(optimistic, assistantMsg)
+          .concat(optimistic, assistantMsg),
       );
     } catch (err: any) {
       setError(err.message || "Failed to send message");
@@ -94,9 +119,15 @@ export default function ChatPanel({ conversationId }: ChatPanelProps) {
     }
   };
 
-  const onSubmit = (e: FormEvent) => { e.preventDefault(); handleSend(); };
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    handleSend();
+  };
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
   };
 
   const triggerFileInput = () => fileInputRef.current?.click();
@@ -111,15 +142,27 @@ export default function ChatPanel({ conversationId }: ChatPanelProps) {
     try {
       const nodes = await documentsApi.uploadPdf(file);
 
+      // SAFETY CHECK: Create a Set of valid node IDs
+      const validNodeIds = new Set(nodes.map((n) => n.id));
+
       const links: GraphLinkData[] = [];
       const seen = new Set<string>();
+
       for (const n of nodes) {
         for (const [targetId, weight] of Object.entries(n.edges || {})) {
           if (targetId === n.id) continue;
+
+          // SAFETY CHECK: Skip links that point to missing nodes
+          if (!validNodeIds.has(targetId)) continue;
+
           const key = [n.id, targetId].sort().join("-");
           if (!seen.has(key)) {
             seen.add(key);
-            links.push({ source: n.id, target: targetId, weight });
+            links.push({
+              source: n.id,
+              target: targetId,
+              weight: weight as number,
+            });
           }
         }
       }
@@ -134,58 +177,129 @@ export default function ChatPanel({ conversationId }: ChatPanelProps) {
   };
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-left">
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+    // Enforce strict flex column height
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        width: "100%",
+      }}
+    >
+      {/* Scrollable Messages Area */}
+      <div
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "24px 16px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "16px",
+        }}
+      >
         {messages.map((msg) => (
-          <div key={msg.id} className={`flex ${msg.role === Role.USER ? "justify-end" : "justify-start"}`}>
-            <div className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm ${
-              msg.role === Role.USER
-                ? "bg-purple-600 text-white rounded-tr-sm"
-                : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-tl-sm"
-            }`}>
+          <div
+            key={msg.id}
+            style={{
+              display: "flex",
+              justifyContent:
+                msg.role === Role.USER ? "flex-end" : "flex-start",
+            }}
+          >
+            <div
+              style={{
+                maxWidth: "75%",
+                padding: "10px 16px",
+                fontSize: "14px",
+                lineHeight: "1.5",
+                backgroundColor: msg.role === Role.USER ? "#9333ea" : "#1f2937",
+                color: msg.role === Role.USER ? "#ffffff" : "#f3f4f6",
+                borderRadius: "16px",
+                borderTopRightRadius: msg.role === Role.USER ? "4px" : "16px",
+                borderTopLeftRadius: msg.role !== Role.USER ? "4px" : "16px",
+              }}
+            >
               {msg.content}
             </div>
           </div>
         ))}
 
         {loading && (
-          <div className="flex justify-start">
-            <div className="bg-gray-100 dark:bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
-              <div className="flex space-x-1.5">
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-              </div>
+          <div style={{ display: "flex", justifyContent: "flex-start" }}>
+            <div
+              style={{
+                backgroundColor: "#1f2937",
+                borderRadius: "16px",
+                borderTopLeftRadius: "4px",
+                padding: "12px 16px",
+              }}
+            >
+              <span style={{ color: "#9ca3af", fontSize: "14px" }}>
+                Thinking...
+              </span>
             </div>
           </div>
         )}
-
         <div ref={messagesEndRef} />
       </div>
 
       {error && (
-        <div className="mx-4 mb-2 px-3 py-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md text-xs text-red-600 dark:text-red-400">
+        <div
+          style={{
+            margin: "0 16px 8px",
+            padding: "8px 12px",
+            backgroundColor: "rgba(127, 29, 29, 0.2)",
+            border: "1px solid #991b1b",
+            borderRadius: "6px",
+            fontSize: "12px",
+            color: "#f87171",
+          }}
+        >
           {error}
         </div>
       )}
 
-      <form onSubmit={onSubmit} className="border-t border-gray-200 dark:border-gray-800 px-4 py-3 bg-white dark:bg-gray-900">
-        <div className="flex gap-2 max-w-4xl mx-auto">
+      {/* Input Area */}
+      <form
+        onSubmit={onSubmit}
+        style={{
+          borderTop: "1px solid #1f2937",
+          padding: "12px 16px",
+          backgroundColor: "#030712",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            gap: "8px",
+            maxWidth: "800px",
+            margin: "0 auto",
+          }}
+        >
           <input
             type="file"
             ref={fileInputRef}
             accept="application/pdf"
             onChange={handleFileChange}
-            className="hidden"
+            style={{ display: "none" }}
           />
+
           <button
             type="button"
             onClick={triggerFileInput}
             disabled={uploading || loading}
-            className="shrink-0 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed text-gray-700 dark:text-gray-200 text-sm font-medium px-3 py-2 rounded-lg transition-colors"
+            style={{
+              padding: "8px 16px",
+              backgroundColor: "#374151",
+              color: "#e5e7eb",
+              border: "none",
+              borderRadius: "8px",
+              cursor: uploading ? "not-allowed" : "pointer",
+            }}
           >
-            {uploading ? "…" : "PDF"}
+            {uploading ? "..." : "PDF"}
           </button>
+
           <input
             type="text"
             value={input}
@@ -193,13 +307,30 @@ export default function ChatPanel({ conversationId }: ChatPanelProps) {
             onKeyDown={onKeyDown}
             placeholder="Type a message..."
             disabled={loading}
-            className="flex-1 min-w-0 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
-            aria-label="Message input"
+            style={{
+              flex: 1,
+              minWidth: 0,
+              borderRadius: "8px",
+              border: "1px solid #374151",
+              backgroundColor: "#1f2937",
+              color: "#f3f4f6",
+              padding: "8px 12px",
+              outline: "none",
+            }}
           />
+
           <button
             type="submit"
             disabled={loading || !input.trim()}
-            className="shrink-0 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            style={{
+              padding: "8px 16px",
+              backgroundColor: "#9333ea",
+              color: "#ffffff",
+              border: "none",
+              borderRadius: "8px",
+              cursor: loading || !input.trim() ? "not-allowed" : "pointer",
+              opacity: loading || !input.trim() ? 0.5 : 1,
+            }}
           >
             Send
           </button>

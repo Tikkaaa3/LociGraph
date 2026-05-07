@@ -3,55 +3,156 @@ import { useGraph } from "../context/GraphContext";
 export default function NodeDetailsPanel() {
   const { graphData, selectedNodeId, selectNode } = useGraph();
 
-  if (!selectedNodeId) return null;
+  if (!selectedNodeId) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100%",
+          width: "100%",
+          color: "#6b7280",
+          fontSize: "14px",
+        }}
+      >
+        Select a node to view details
+      </div>
+    );
+  }
 
   const node = graphData.nodes.find((n) => n.id === selectedNodeId);
   if (!node) return null;
 
-  const getActivationReason = (act: number) => {
-    if (act > 0.8) return "Direct semantic match to query — seed node with highest relevance.";
-    if (act > 0.5) return "Strong graph propagation from related seed nodes.";
-    if (act > 0.2) return "Moderate activation via multi-hop graph connections.";
-    return "Related via graph edges to active memory region.";
-  };
-
   return (
-    <div className="absolute top-0 right-0 w-80 h-full bg-gray-900/95 border-l border-gray-800 backdrop-blur-sm z-20 flex flex-col text-gray-200">
-      <div className="flex items-center justify-between p-4 border-b border-gray-800">
-        <h3 className="font-mono text-sm truncate" title={node.id}>{node.id}</h3>
-        <button onClick={() => selectNode(null)} className="text-gray-400 hover:text-white transition-colors">✕</button>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100%",
+        width: "100%",
+        color: "#e5e7eb",
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "16px",
+          borderBottom: "1px solid #1f2937",
+        }}
+      >
+        <h3
+          style={{
+            fontFamily: "monospace",
+            fontSize: "14px",
+            fontWeight: "bold",
+            color: "#22d3ee",
+            margin: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+          title={node.id}
+        >
+          {node.id}
+        </h3>
+        <button
+          onClick={() => selectNode(null)}
+          style={{
+            background: "#374151",
+            border: "none",
+            color: "#9ca3af",
+            width: "24px",
+            height: "24px",
+            borderRadius: "50%",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          ✕
+        </button>
       </div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
+      {/* Scrollable Content */}
+      <div
+        style={{
+          flex: 1,
+          overflowY: "auto",
+          padding: "16px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "24px",
+        }}
+      >
         <div>
-          <h4 className="text-xs uppercase tracking-wider text-gray-500 mb-1">Content</h4>
-          <div className="bg-gray-800/50 rounded p-3 text-sm whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+          <h4
+            style={{
+              fontSize: "10px",
+              textTransform: "uppercase",
+              fontWeight: "bold",
+              letterSpacing: "1px",
+              color: "#6b7280",
+              marginBottom: "8px",
+              marginTop: 0,
+            }}
+          >
+            Content
+          </h4>
+          <div
+            style={{
+              backgroundColor: "rgba(31,41,55,0.5)",
+              borderRadius: "8px",
+              padding: "12px",
+              fontSize: "14px",
+              whiteSpace: "pre-wrap",
+              border: "1px solid rgba(55,65,81,0.5)",
+            }}
+          >
             {node.content}
           </div>
         </div>
+
         <div>
-          <h4 className="text-xs uppercase tracking-wider text-gray-500 mb-1">Activation</h4>
-          <div className="w-full bg-gray-800 rounded-full h-2 mb-1">
-            <div className="bg-cyan-500 h-2 rounded-full transition-all duration-300" style={{ width: `${node.activation * 100}%` }} />
+          <h4
+            style={{
+              fontSize: "10px",
+              textTransform: "uppercase",
+              fontWeight: "bold",
+              letterSpacing: "1px",
+              color: "#6b7280",
+              marginBottom: "8px",
+              marginTop: 0,
+            }}
+          >
+            Activation
+          </h4>
+          <div
+            style={{
+              width: "100%",
+              backgroundColor: "#1f2937",
+              borderRadius: "9999px",
+              height: "8px",
+              marginBottom: "8px",
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: "#06b6d4",
+                height: "8px",
+                borderRadius: "9999px",
+                width: `${node.activation * 100}%`,
+              }}
+            />
           </div>
-          <p className="text-xs text-gray-400">{(node.activation * 100).toFixed(1)}%</p>
+          <span style={{ color: "#22d3ee", fontWeight: 500, fontSize: "12px" }}>
+            {(node.activation * 100).toFixed(1)}%
+          </span>
         </div>
-        <div>
-          <h4 className="text-xs uppercase tracking-wider text-gray-500 mb-1">Why Activated</h4>
-          <p className="text-sm text-gray-300">{getActivationReason(node.activation)}</p>
-        </div>
-        {node.top_neighbors && node.top_neighbors.length > 0 && (
-          <div>
-            <h4 className="text-xs uppercase tracking-wider text-gray-500 mb-1">Top Neighbors</h4>
-            <ul className="space-y-1">
-              {node.top_neighbors.map((n) => (
-                <li key={n.id} className="flex justify-between text-sm bg-gray-800/30 px-2 py-1 rounded">
-                  <span className="font-mono truncate mr-2" title={n.id}>{n.id}</span>
-                  <span className="text-gray-400">{n.weight.toFixed(2)}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
     </div>
   );
