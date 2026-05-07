@@ -15,7 +15,7 @@ export interface GraphNodeResponse {
   top_neighbors?: { id: string; weight: number }[];
 }
 
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 /* ---------- Error handling ---------- */
 
@@ -30,7 +30,7 @@ export class ApiError extends Error {
     message: string,
     public statusCode?: number,
     public code?: string,
-    public originalError?: AxiosError
+    public originalError?: AxiosError,
   ) {
     super(message);
     this.name = "ApiError";
@@ -54,17 +54,25 @@ apiClient.interceptors.response.use(
     }
     if (error.request) {
       return Promise.reject(
-        new ApiError("Network error. Please check your connection.", undefined, undefined, error)
+        new ApiError(
+          "Network error. Please check your connection.",
+          undefined,
+          undefined,
+          error,
+        ),
       );
     }
-    return Promise.reject(new ApiError(error.message, undefined, undefined, error));
-  }
+    return Promise.reject(
+      new ApiError(error.message, undefined, undefined, error),
+    );
+  },
 );
 
 /* ---------- REST resources ---------- */
 
 export const conversationsApi = {
-  list: () => apiClient.get<Conversation[]>("/conversations").then((r) => r.data),
+  list: () =>
+    apiClient.get<Conversation[]>("/conversations").then((r) => r.data),
   create: (body: ConversationCreate) =>
     apiClient.post<Conversation>("/conversations", body).then((r) => r.data),
   get: (id: string) =>
@@ -74,7 +82,9 @@ export const conversationsApi = {
 
 export const messagesApi = {
   list: (conversationId: string) =>
-    apiClient.get<Message[]>(`/conversations/${conversationId}/messages`).then((r) => r.data),
+    apiClient
+      .get<Message[]>(`/conversations/${conversationId}/messages`)
+      .then((r) => r.data),
   send: (conversationId: string, body: MessageCreate) =>
     apiClient
       .post<Message>(`/conversations/${conversationId}/messages`, body)
@@ -111,7 +121,7 @@ export const streamApi = {
 
   connectWebSocket: (
     endpoint: string,
-    callbacks: StreamCallbacks
+    callbacks: StreamCallbacks,
   ): { send: (msg: string) => void; close: () => void } => {
     const ws = new WebSocket(`ws://localhost:8000${endpoint}`);
     ws.onmessage = (e) => callbacks.onMessage?.(e.data);
