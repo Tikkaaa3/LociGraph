@@ -5,11 +5,21 @@
 Think of it as a <b>memory-native RAG system</b>, where retrieval follows structure—not just similarity.<br><br>
 Structure knowledge as an activated memory graph. Upload documents, explore semantic connections, and generate strictly grounded answers with visual memory replay.
 </p>
- <p align="center">
-   <img src="https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white" alt="Python 3.11+">
-   <img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI">
-   <img src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white" alt="Docker Compose">
- </p>
+
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![Uvicorn](https://img.shields.io/badge/Uvicorn-ASGI-000000)
+![spaCy](https://img.shields.io/badge/spaCy-NLP-09A3D5)
+![OpenAI](https://img.shields.io/badge/OpenAI--SDK-Compatible-412991)
+![OpenRouter](https://img.shields.io/badge/OpenRouter-Compatible-FF6B6B)
+![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-blue?logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white)
+![TailwindCSS](https://img.shields.io/badge/TailwindCSS-38B2AC?logo=tailwind-css&logoColor=white)
+![React Force Graph](https://img.shields.io/badge/react--force--graph-2D-lightgrey)
+![Axios](https://img.shields.io/badge/Axios-5A29E4?logo=axios&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![Docker Compose](https://img.shields.io/badge/Docker--Compose-2496ED?logo=docker&logoColor=white)
 
 ---
 **LociGraph** is inspired by the _Method of Loci_ (memory palace) — a technique where information is organized spatially and retrieved by walking through
