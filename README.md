@@ -6,12 +6,18 @@ Think of it as a <b>memory-native RAG system</b>, where retrieval follows struct
 Structure knowledge as an activated memory graph. Upload documents, explore semantic connections, and generate strictly grounded answers with visual memory replay.
 </p>
 
+![License](https://img.shields.io/github/license/Tikkaaa3/LociGraph?style=for-the-badge&cacheSeconds=60)
+![Last Commit](https://img.shields.io/github/last-commit/Tikkaaa3/LociGraph?style=for-the-badge)
+![Repo Size](https://img.shields.io/github/repo-size/Tikkaaa3/LociGraph?style=for-the-badge&cacheSeconds=60)
+
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
 ![Uvicorn](https://img.shields.io/badge/Uvicorn-ASGI-000000)
 ![spaCy](https://img.shields.io/badge/spaCy-NLP-09A3D5)
 ![OpenAI](https://img.shields.io/badge/OpenAI--SDK-Compatible-412991)
 ![OpenRouter](https://img.shields.io/badge/OpenRouter-Compatible-FF6B6B)
+
+
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-blue?logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white)
