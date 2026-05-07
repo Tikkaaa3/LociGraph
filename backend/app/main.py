@@ -7,6 +7,14 @@ from .routers.documents import router as documents_router
 
 app = FastAPI(title="LociGraph")
 
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    force=True,  # IMPORTANT: overrides uvicorn defaults
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],  # Vite default
