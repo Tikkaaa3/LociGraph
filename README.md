@@ -39,33 +39,40 @@ citation constraints and model-agnostic LLM generation.
 ## 🏗️ Architecture
 
 ```
-┌─────────────┐ ┌──────────────┐ ┌─────────────────┐
+┌──────────────┐      ┌──────────────┐      ┌────────────────────┐
+│    Upload    │ ───▶│   Extract    │ ───▶│    Embed & Build   │
+│ (PDF / Text) │      │  & Chunk     │      │   Semantic Graph   │
+└──────────────┘      └──────────────┘      └────────────────────┘
+                                                     │
+                                                     │
+                                                     ▼
+                                              ┌──────────────┐
+                                              │    Query     │
+                                              └──────┬───────┘
+                                                     │
+                          ┌──────────────────────────┼──────────────────────────┐
+                          │                          │                          │
+                          ▼                          ▼                          ▼
+                    keyword                      semantic                 hybrid / graph
 
-│ Upload │────▶│ Extract │────▶│ Embed & Build │
-
-│(PDF / Text) │ │ & Chunk │ │ Semantic Graph │
-
-└─────────────┘ └──────────────┘ └─────────────────┘
-
+                                                     │
+                                                     ▼
+                                       ┌────────────────────┐
+                                       │   Graph Memory     │
+                                       │   (Activation)     │
+                                       └────────┬───────────┘
                                                 │
-
-Query ◄─────────────────────────────────────────────┘
-
-│
-
-├──► keyword │ semantic │ hybrid │ graph
-
-│
-
-▼
-
-┌─────────────────┐ ┌──────────────┐ ┌──────────────┐
-
-│ Graph Memory │────▶│ Build RAG │────▶│ Generate │
-
-│ (Activation) │ │ Prompt │ │ Answer │
-
-└─────────────────┘ └──────────────┘ └──────────────┘
+                                                ▼
+                                       ┌────────────────────┐
+                                       │    Build RAG       │
+                                       │     Prompt         │
+                                       └────────┬───────────┘
+                                                │
+                                                ▼
+                                       ┌────────────────────┐
+                                       │     Generate       │
+                                       │      Answer        │
+                                       └────────────────────┘
 ```
 
 ### Graph Retrieval Pipeline (`graph` mode)
