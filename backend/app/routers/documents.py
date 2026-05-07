@@ -16,8 +16,12 @@ class UploadRequest(BaseModel):
     content: str
 
 
+from app.services.documents import add_document, clear_documents
+
+
 @router.post("/upload")
 def upload_document(body: UploadRequest):
+    clear_documents()  # wipe stale chunks from previous run
     return add_document(body.content)
 
 

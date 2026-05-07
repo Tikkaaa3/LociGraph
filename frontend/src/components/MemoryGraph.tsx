@@ -10,9 +10,20 @@ interface FGNode extends GraphNodeData {
 
 const TOP_N = 3;
 
+// 🎛️ THE MAGIC DIAL: Adjust this to push nodes higher or lower on the screen.
+const Y_OFFSET = 110;
+
 export default function MemoryGraph() {
   const { graphData, selectNode, selectedNodeId } = useGraph();
   const fgRef = useRef<any>(null);
+
+  // Track if we've already padded the camera
+  const hasFittedCamera = useRef(false);
+
+  // Reset the camera tracker whenever new nodes/messages arrive
+  useEffect(() => {
+    hasFittedCamera.current = false;
+  }, [graphData]);
 
   const topNodes = useMemo(() => {
     return [...graphData.nodes]
@@ -53,8 +64,8 @@ export default function MemoryGraph() {
         | FGNode
         | undefined;
       if (node && node.x != null && node.y != null) {
-        fgRef.current.centerAt(node.x, node.y, 800);
-        fgRef.current.zoom(3, 800);
+        // Centers the camera using our global Y_OFFSET
+        fgRef.current.centerAt(node.x, node.y + Y_OFFSET, 800);
       }
     }
   }, [selectedNodeId, fgData.nodes]);
@@ -64,8 +75,6 @@ export default function MemoryGraph() {
       if (node.x == null || node.y == null) return;
 
       const act = node.activation;
-      // Note: If you upload a PDF and nodes have 0% activation, we still want to see them as tiny dots
-      // rather than them disappearing completely.
       const radiusBase = Math.max(1, act * 10);
 
       const isTop = topNodeIds.has(node.id);
@@ -83,7 +92,7 @@ export default function MemoryGraph() {
       else if (act > 0.1) color = "rgba(59,130,246,0.5)";
 
       if (!isImportant && act <= 0.1) {
-        color = "rgba(107,114,128,0.3)"; // Made slightly more visible for PDF uploads
+        color = "rgba(107,114,128,0.3)";
       }
 
       ctx.beginPath();
@@ -155,8 +164,6 @@ export default function MemoryGraph() {
   }
 
   return (
-    // CRITICAL FIX: position absolute, top 0, left 0, width 100%, height 100%
-    // This forces the canvas to stay exactly within the 40% box and stops the layout blowout.
     <div
       style={{
         position: "absolute",
@@ -178,11 +185,64 @@ export default function MemoryGraph() {
         cooldownTicks={100}
         d3AlphaDecay={0.02}
         d3VelocityDecay={0.3}
+        onEngineStop={() => {
+          if (
+            fgRef.current &&
+            !hasFittedCamera.current &&
+            fgData.nodes.length > 0
+          ) {
+            hasFittedCamera.current = true;
+
+            if (fgData.nodes.length <= 4) {
+              let minX = Infinity,
+                maxX = -Infinity;
+              let minY = Infinity,
+                maxY = -Infinity;
+              let hasValidCoords = false;
+
+              fgData.nodes.forEach((node: FGNode) => {
+                if (node.x != null && node.y != null) {
+                  minX = Math.min(minX, node.x);
+                  maxX = Math.max(maxX, node.x);
+                  minY = Math.min(minY, node.y);
+                  maxY = Math.max(maxY, node.y);
+                  hasValidCoords = true;
+                }
+              });
+
+              let centerX = 0;
+              let centerY = 0;
+
+              if (hasValidCoords) {
+                centerX = (minX + maxX) / 2;
+                centerY = (minY + maxY) / 2;
+              }
+
+              // Point the camera at the calculated center PLUS the offset, then zoom
+              fgRef.current.centerAt(centerX, centerY + Y_OFFSET, 500);
+              fgRef.current.zoom(2.5, 500);
+            } else {
+              // For large PDF uploads
+              fgRef.current.zoomToFit(500, 150);
+
+              // Shift the camera up slightly after zoomToFit finishes
+              setTimeout(() => {
+                if (fgRef.current) {
+                  const currentCenter = fgRef.current.centerAt();
+                  fgRef.current.centerAt(
+                    currentCenter.x,
+                    currentCenter.y + Y_OFFSET,
+                    500,
+                  );
+                }
+              }, 500);
+            }
+          }
+        }}
         onNodeClick={(node: FGNode) => {
           selectNode(node.id);
           if (fgRef.current && node.x != null && node.y != null) {
-            fgRef.current.centerAt(node.x, node.y, 800);
-            fgRef.current.zoom(3, 800);
+            fgRef.current.centerAt(node.x, node.y + Y_OFFSET, 800);
           }
         }}
       />

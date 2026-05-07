@@ -1,16 +1,27 @@
-import hashlib
+import logging
 import math
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 from typing import Dict, List
 from uuid import uuid4
 
-from .chunking import semantic_chunk_text
+from .chunking import semantic_chunk_text, _encoder
 
 # Internal store for document chunks
 chunks: Dict[str, dict] = {}
 
 # Similarity threshold for graph edge creation
-SIMILARITY_THRESHOLD = 0.6
+# Real sentence-transformer cosine similarities between topically distinct chunks
+# typically land in [0.2, 0.5] — 0.6 was calibrated for the MD5 mock and is too high.
+SIMILARITY_THRESHOLD = 0.30
+
+# Activation config
+# T=4.0 was collapsing (0.73, 0.50, 0.46) → (0.35, 0.33, 0.32) — nearly uniform.
+# T=0.5 produces sharp separation: the best chunk dominates, weak ones drop steeply.
+ACTIVATION_SEED_TEMPERATURE = 0.5
+ACTIVATION_HOP_DECAY = 0.6  # base per-hop decay (multiplied by edge weight)
+ACTIVATION_MIN_PROPAGATE = 0.05  # don't propagate from nodes below this activation
 
 
 def add_document(content: str) -> List[dict]:
@@ -29,40 +40,48 @@ def add_document(content: str) -> List[dict]:
             "embedding": get_embedding(chunk_content),
             "created_at": created_at,
             "chunk_index": i,
-            "edges": {},       # NEW
-            "activation": 0.0, # NEW
+            "edges": {},
+            "activation": 0.0,
         }
         chunks[chunk_id] = chunk
-        build_graph_connections(chunk)  # NEW
+        build_graph_connections(chunk)
         chunk_results.append(chunk)
 
     return chunk_results
 
 
-def get_embedding(text: str, dims: int = 64) -> List[float]:
-    """Deterministic mock embedding from text hash."""
-    digest = hashlib.md5(text.encode("utf-8")).digest()
-    return [(digest[i % len(digest)] / 255.0) * 2 - 1 for i in range(dims)]
+def get_embedding(text: str) -> List[float]:
+    """Real semantic embedding via the shared sentence-transformer model."""
+    return _encoder.encode(text, convert_to_numpy=True).tolist()
+
+
+def clear_documents() -> None:
+    """Wipe all stored chunks. Call before re-ingesting the same document."""
+    chunks.clear()
+    logger.debug("Document store cleared.")
 
 
 def build_graph_connections(new_chunk: dict) -> None:
     """Wire a new memory node into the existing graph via semantic similarity."""
-    new_len = len(new_chunk["content"])
-    
     for existing_id, existing in chunks.items():
+        # skip self — check both id and doc_id+index to guard against duplicate ingestion
         if existing_id == new_chunk["id"]:
             continue
-            
-        # Lightweight pre-filter: skip if text lengths differ by more than 50%
-        # of the average chunk size, as vastly different chunks rarely exceed threshold.
-        if abs(new_len - len(existing["content"])) > 150:
+        if (
+            existing["doc_id"] == new_chunk["doc_id"]
+            and existing["chunk_index"] == new_chunk["chunk_index"]
+        ):
             continue
-            
+
         raw_sim = _cosine_similarity(new_chunk["embedding"], existing["embedding"])
         if raw_sim > SIMILARITY_THRESHOLD:
             weight = (raw_sim + 1) / 2  # normalize cosine → [0, 1]
             new_chunk["edges"][existing_id] = weight
             existing.setdefault("edges", {})[new_chunk["id"]] = weight
+            logger.debug(
+                f"  EDGE  {new_chunk['id'][:8]} ↔ {existing_id[:8]}"
+                f"  sim={raw_sim:.3f}  weight={weight:.3f}"
+            )
 
 
 def _cosine_similarity(a: List[float], b: List[float]) -> float:
@@ -74,11 +93,12 @@ def _cosine_similarity(a: List[float], b: List[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
-def score_chunk_semantic(query: str, chunk: dict, query_emb: list[float] | None = None) -> float:
+def score_chunk_semantic(
+    query: str, chunk: dict, query_emb: list[float] | None = None
+) -> float:
     if query_emb is None:
         query_emb = get_embedding(query)
-    chunk_emb = chunk["embedding"]
-    return _cosine_similarity(query_emb, chunk_emb)
+    return _cosine_similarity(query_emb, chunk["embedding"])
 
 
 # Hybrid scoring fuses exact lexical overlap with conceptual embedding similarity.
@@ -86,7 +106,9 @@ def score_chunk_semantic(query: str, chunk: dict, query_emb: list[float] | None 
 # paraphrases, and semantic relatives that keyword counts alone would miss.
 # The 0.4 / 0.6 weighting prioritizes semantic meaning without discarding
 # the precision of exact keyword matches.
-def score_chunk(query: str, chunk: dict, mode: str = "keyword", query_emb: list[float] | None = None) -> float:
+def score_chunk(
+    query: str, chunk: dict, mode: str = "keyword", query_emb: list[float] | None = None
+) -> float:
     if mode == "semantic":
         return score_chunk_semantic(query, chunk, query_emb)
 
@@ -94,18 +116,15 @@ def score_chunk(query: str, chunk: dict, mode: str = "keyword", query_emb: list[
     text = chunk["content"].lower()
 
     if mode == "hybrid":
-        # Normalize keyword overlap to [0, 1]
         matches = sum(1 for kw in keywords if kw in text)
         keyword_score = matches / len(keywords) if keywords else 0.0
 
-        # Normalize semantic cosine similarity from [-1, 1] → [0, 1]
         raw_semantic = score_chunk_semantic(query, chunk, query_emb)
         semantic_score = (raw_semantic + 1) / 2
 
-        # Weighted fusion: prioritize semantic meaning (60 %) while preserving keyword signal (40 %)
         return (0.4 * keyword_score) + (0.6 * semantic_score)
 
-    # Legacy keyword mode — unchanged raw-count behavior
+    # Legacy keyword mode
     return float(sum(1 for kw in keywords if kw in text))
 
 
@@ -122,55 +141,103 @@ def _retrieve_scored(
     return scored
 
 
+def _softmax(scores: list[float], temperature: float = 1.0) -> list[float]:
+    """
+    Softmax with temperature over a list of raw scores.
+    Higher temperature → flatter distribution (more chunks get meaningful activation).
+    Lower temperature → winner-takes-most (top chunk dominates).
+    """
+    if not scores:
+        return []
+    scaled = [s / temperature for s in scores]
+    max_s = max(scaled)  # numerical stability
+    exps = [math.exp(s - max_s) for s in scaled]
+    total = sum(exps)
+    return [e / total for e in exps]
+
+
 def activate_nodes(query: str, top_k: int = 5, hops: int = 2) -> List[dict]:
-    """
-    Seed node activation via hybrid retrieval, then propagate signals
-    across multiple graph hops with decay.
-    """
-    # FIX 2: Use local activation state instead of mutating global chunks
+    logger.debug(f"\n{'═' * 60}\nACTIVATE NODES  query={query!r}\n{'═' * 60}")
+
     activation_state: Dict[str, float] = {}
 
-    # Seed nodes: top-k by hybrid score
     query_emb = get_embedding(query)
-    seeds = _retrieve_scored(query, "hybrid", query_emb)[:top_k]
+    all_scored = _retrieve_scored(query, "hybrid", query_emb)
+    seeds = all_scored[:top_k]
 
+    if not seeds:
+        return []
+
+    logger.debug("── RAW HYBRID SCORES (all chunks) ──")
+    for score, chunk in all_scored:
+        preview = chunk["content"][:60].replace("\n", " ")
+        logger.debug(f"  score={score:.4f}  {preview!r}")
+
+    raw_scores = [score for score, _ in seeds]
+    seed_activations = _softmax(raw_scores, temperature=ACTIVATION_SEED_TEMPERATURE)
+
+    logger.debug(f"\n── SEED ACTIVATIONS (softmax T={ACTIVATION_SEED_TEMPERATURE}) ──")
     frontier: list[str] = []
-    for score, chunk in seeds:
-        activation = min(1.0, max(0.0, score))
+    for activation, (raw, chunk) in zip(seed_activations, seeds):
+        preview = chunk["content"][:60].replace("\n", " ")
+        logger.debug(
+            f"  raw={raw:.4f} → softmax={activation:.4f}"
+            f"  edges={len(chunk.get('edges', {}))}"
+            f"  {preview!r}"
+        )
         activation_state[chunk["id"]] = activation
         frontier.append(chunk["id"])
 
-    # FIX 4: Multi-hop propagation with bounded hop count (prevents infinite loops)
+    seed_ids = set(activation_state.keys())  # ← freeze seed set before hopping
+
     for hop in range(1, hops + 1):
-        decay = 0.5 ** hop
+        logger.debug(f"\n── HOP {hop}  frontier_size={len(frontier)} ──")
         next_frontier: set[str] = set()
+        hop_scale = ACTIVATION_HOP_DECAY**hop  # ← compounds per hop
+
         for node_id in frontier:
             node = chunks.get(node_id)
             if node is None:
                 continue
             current_activation = activation_state.get(node_id, 0.0)
-            if current_activation == 0.0:
+            if current_activation < ACTIVATION_MIN_PROPAGATE:
                 continue
+
             for neighbor_id, weight in node.get("edges", {}).items():
-                added = weight * current_activation * decay
-                neighbor_activation = activation_state.get(neighbor_id, 0.0)
-                new_activation = min(1.0, neighbor_activation + added)
-                activation_state[neighbor_id] = new_activation
+                if neighbor_id in seed_ids:  # ← don't re-inflate seeds
+                    continue
+                effective_decay = hop_scale * weight
+                added = current_activation * effective_decay
+                prev = activation_state.get(neighbor_id, 0.0)
+                new_val = min(1.0, max(prev, added))  # ← max, not sum
+                activation_state[neighbor_id] = new_val
                 next_frontier.add(neighbor_id)
+                logger.debug(
+                    f"  {node_id[:8]} → {neighbor_id[:8]}"
+                    f"  edge_w={weight:.3f}  decay={effective_decay:.3f}"
+                    f"  added={added:.4f}  activation: {prev:.4f} → {new_val:.4f}"
+                )
         frontier = list(next_frontier)
 
-    # FIX 5: Normalize activations across the graph
-    if activation_state:
-        max_activation = max(activation_state.values())
-        if max_activation > 0:
-            for cid in activation_state:
-                activation_state[cid] = min(1.0, activation_state[cid] / max_activation)
+    # normalise
+    logger.debug("\n── PRE-NORMALISATION ACTIVATIONS ──")
+    for cid, act in sorted(activation_state.items(), key=lambda x: -x[1]):
+        preview = chunks.get(cid, {}).get("content", "")[:60].replace("\n", " ")
+        logger.debug(f"  {cid[:8]}  act={act:.4f}  {preview!r}")
 
-    # Build results without mutating stored chunks
+    if activation_state:
+        max_act = max(activation_state.values())
+        if max_act > 0:
+            for cid in activation_state:
+                activation_state[cid] = round(activation_state[cid] / max_act, 4)
+
+    logger.debug("\n── FINAL ACTIVATIONS ──")
     result = []
     for c in chunks.values():
         act = activation_state.get(c["id"], 0.0)
         if act > 0:
+            preview = c["content"][:60].replace("\n", " ")
+            logger.debug(f"  {act * 100:.1f}%  {preview!r}")
             result.append({**c, "activation": act})
     result.sort(key=lambda x: x["activation"], reverse=True)
     return result
@@ -185,7 +252,6 @@ def retrieve_documents(query: str, top_k: int = 3, mode: str = "keyword") -> Lis
         activated = activate_nodes(query, top_k=top_k)
         result = []
         for chunk in activated[:top_k]:
-            # FIX 3: Create a copy before attaching metadata to prevent mutation
             chunk_copy = dict(chunk)
             top = sorted(
                 chunk_copy.get("edges", {}).items(), key=lambda x: x[1], reverse=True
