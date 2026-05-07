@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useCallback } from "react";
+import { useMemo, useCallback } from "react";
 import ForceGraph2D from "react-force-graph-2d";
 import { useGraph } from "../context/GraphContext";
 import type { GraphNodeData } from "../types/graph";
@@ -8,22 +8,29 @@ interface FGNode extends GraphNodeData {
   y?: number;
 }
 
-export default function MemoryGraph() {
-  const { selectNode, graphData, selectedNodeId } = useGraph();
-  const [hoveredNode, setHoveredNode] = useState<FGNode | null>(null);
-  const fgRef = useRef<any>(null);
+const TOP_N = 3;
 
-  const selectedNode = useMemo(
-    () => graphData.nodes.find((n) => n.id === selectedNodeId) ?? null,
-    [graphData.nodes, selectedNodeId]
+export default function MemoryGraph() {
+  const { graphData } = useGraph();
+
+  const topNodes = useMemo(() => {
+    return [...graphData.nodes]
+      .sort((a, b) => b.activation - a.activation)
+      .slice(0, TOP_N);
+  }, [graphData.nodes]);
+
+  const topNodeIds = useMemo(
+    () => new Set(topNodes.map((n) => n.id)),
+    [topNodes]
   );
 
-  const tooltipNode = hoveredNode ?? selectedNode;
-
-  const fgData = useMemo(() => ({
-    nodes: graphData.nodes.map((n) => ({ ...n })),
-    links: graphData.links.map((l) => ({ ...l })),
-  }), [graphData]);
+  const fgData = useMemo(
+    () => ({
+      nodes: graphData.nodes.map((n) => ({ ...n })),
+      links: graphData.links.map((l) => ({ ...l })),
+    }),
+    [graphData]
+  );
 
   const hasData = graphData.nodes.length > 0;
 
@@ -35,12 +42,10 @@ export default function MemoryGraph() {
       const act = node.activation;
       if (act <= 0.01) return;
 
-      const isHovered = hoveredNode?.id === node.id;
-      const isSelected = selectedNodeId === node.id;
+      const isTop = topNodeIds.has(node.id);
 
       let radius = Math.max(2, act * 10);
-      if (isSelected) radius *= 1.3;
-      else if (isHovered) radius *= 1.15;
+      if (isTop) radius *= 1.25;
 
       let color = "rgba(107,114,128,0.2)";
       if (act > 0.8) color = "#ffffff";
@@ -53,13 +58,13 @@ export default function MemoryGraph() {
       ctx.fillStyle = color;
       ctx.fill();
 
-      if (isSelected) {
-        ctx.strokeStyle = "rgba(255,255,255,0.9)";
+      if (isTop) {
+        ctx.strokeStyle = "rgba(34,211,238,0.6)";
         ctx.lineWidth = 1.5;
         ctx.stroke();
       }
 
-      if (act > 0.5 || isSelected || isHovered) {
+      if (act > 0.5 || isTop) {
         const fontSize = Math.min(16, Math.max(8, 12 / globalScale));
         ctx.font = `${fontSize}px sans-serif`;
         ctx.fillStyle = "rgba(255,255,255,0.7)";
@@ -69,56 +74,21 @@ export default function MemoryGraph() {
             ? node.content.slice(0, 24) + "..."
             : node.content
           : node.id.slice(0, 8);
-        ctx.fillText(
-          labelText,
-          node.x,
-          node.y + radius + 12 / globalScale
-        );
+        ctx.fillText(labelText, node.x, node.y + radius + 12 / globalScale);
       }
     },
-    [hoveredNode, selectedNodeId]
+    [topNodeIds]
   );
 
-  const nodePointerAreaPaint = useCallback(
-    (node: FGNode, color: string, ctx: CanvasRenderingContext2D) => {
-      if (node.x == null || node.y == null) return;
-      if (!ctx || typeof ctx.beginPath !== "function") return;
-
-      const act = node.activation;
-      const isSelected = selectedNodeId === node.id;
-
-      let radius = Math.max(2, act * 10);
-      if (isSelected) radius *= 1.3;
-      radius = Math.max(radius + 12, 22);
-
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
-      ctx.fillStyle = color;
-      ctx.fill();
-    },
-    [selectedNodeId]
+  const linkWidth = useCallback(
+    (link: any) => Math.max(0.5, link.weight * 3),
+    []
   );
-
-  const linkWidth = useCallback((link: any) => Math.max(0.5, link.weight * 3), []);
   const linkColor = useCallback((link: any) => {
     if (link.weight > 0.6) return "rgba(34,211,238,0.5)";
     if (link.weight >= 0.3) return "rgba(59,130,246,0.3)";
     return "rgba(107,114,128,0.15)";
   }, []);
-
-  const handleNodeHover = useCallback((node: FGNode | null) => {
-    console.log("hover", node?.id);
-    setHoveredNode(node);
-  }, []);
-
-  const handleNodeClick = useCallback((node: FGNode) => {
-    console.log("click", node?.id);
-    selectNode(node.id);
-  }, [selectNode]);
-
-  const handleBackgroundClick = useCallback(() => {
-    selectNode(null);
-  }, [selectNode]);
 
   if (!hasData) {
     return (
@@ -129,55 +99,50 @@ export default function MemoryGraph() {
   }
 
   return (
-    <div
-      className="w-full h-full relative bg-gray-950"
-      style={{ cursor: hoveredNode ? "pointer" : "default" }}
-    >
-      {/* Debug state readout */}
-      <div className="absolute top-4 left-4 z-50 bg-black/80 text-green-400 font-mono text-xs p-2 rounded pointer-events-none space-y-0.5">
-        <div>DEBUG</div>
-        <div>hovered: {hoveredNode?.id ?? "null"}</div>
-        <div>selected: {selectedNodeId ?? "null"}</div>
-        <div>tooltip: {tooltipNode ? "true" : "false"}</div>
-        <div>nodes: {fgData.nodes.length}</div>
-      </div>
-
-      {/* Hardcoded render test */}
-      <div className="absolute top-4 right-4 z-50 bg-red-600 text-white p-4 rounded pointer-events-none">
-        TEST PANEL
-      </div>
-
+    <div className="w-full h-full relative bg-gray-950">
       <ForceGraph2D
-        ref={fgRef}
         graphData={fgData}
         backgroundColor="#030712"
         nodeCanvasObject={nodeCanvasObject}
-        nodePointerAreaPaint={nodePointerAreaPaint}
         linkWidth={linkWidth}
         linkColor={linkColor}
-        onNodeClick={handleNodeClick}
-        onNodeHover={handleNodeHover}
-        onBackgroundClick={handleBackgroundClick}
         cooldownTicks={100}
         d3AlphaDecay={0.02}
         d3VelocityDecay={0.3}
       />
-      {tooltipNode && (
-        <div className="absolute top-4 right-4 z-50 w-64 max-h-96 overflow-y-auto bg-gray-900/90 border border-gray-700 rounded-md p-3 text-xs text-gray-200 pointer-events-none shadow-lg backdrop-blur-sm">
-          <div className="font-mono text-gray-400 mb-1 break-all">
-            {tooltipNode.id}
+
+      <div className="absolute top-4 right-4 z-50 w-64 flex flex-col gap-2">
+        {topNodes.map((node, index) => (
+          <div
+            key={node.id}
+            className={`p-3 rounded-md border text-xs shadow-lg backdrop-blur-sm ${
+              index === 0
+                ? "bg-gray-800/95 border-cyan-400 text-white"
+                : "bg-gray-900/90 border-gray-700 text-gray-200"
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span
+                className="font-mono text-gray-400 truncate"
+                title={node.id}
+              >
+                {node.id.slice(0, 10)}
+              </span>
+              <span className="text-cyan-400 font-medium">
+                {(node.activation * 100).toFixed(1)}%
+              </span>
+            </div>
+            <p className="leading-relaxed break-words max-h-24 overflow-y-auto mb-1">
+              {node.content.length > 220
+                ? node.content.slice(0, 220) + "…"
+                : node.content}
+            </p>
+            <div className="text-gray-500 text-[10px]">
+              {Object.keys(node.edges || {}).length} edges
+            </div>
           </div>
-          <div className="text-gray-300 mb-2 leading-relaxed break-words max-h-32 overflow-y-auto">
-            {tooltipNode.content.length > 300
-              ? tooltipNode.content.slice(0, 300) + "..."
-              : tooltipNode.content}
-          </div>
-          <div className="flex justify-between text-gray-400">
-            <span>Activation: {(tooltipNode.activation * 100).toFixed(1)}%</span>
-            <span>Edges: {Object.keys(tooltipNode.edges || {}).length}</span>
-          </div>
-        </div>
-      )}
+        ))}
+      </div>
     </div>
   );
 }
