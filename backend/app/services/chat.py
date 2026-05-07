@@ -1,6 +1,6 @@
 import os
 import logging
-from typing import List
+from typing import List, Tuple
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -11,12 +11,27 @@ from .documents import retrieve_documents
 
 logger = logging.getLogger(__name__)
 
-client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+from openai import AsyncOpenAI
+import os
+
+client = AsyncOpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    base_url=os.getenv("OPENAI_BASE_URL"),
+    default_headers={
+        "HTTP-Referer": "http://localhost:5173",
+        "X-Title": "LociGraph",
+    },
+)
 LLM_MODEL = os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")
 
 
+# ----------------------------
+# Utils
+# ----------------------------
+
+
 def extract_query(messages: List[MessageResponse]) -> str:
-    """Extract the last user message to use as the search query."""
+    """Extract last user message."""
     for m in reversed(messages):
         if m.role == Role.USER:
             return m.content
@@ -27,48 +42,74 @@ def retrieve_context(query: str) -> List[dict]:
     return retrieve_documents(query)
 
 
-def build_rag_prompt(question: str, chunks: List[str]) -> str:
-    """Build structured prompt with numbered context chunks for the LLM."""
-    context_lines = [f"[{i + 1}] {text}" for i, text in enumerate(chunks)]
-    context_str = "\n".join(context_lines)
-    return (
-        "SYSTEM:\n"
-        "You are a precise and grounded assistant. You must only use the provided context to answer the question.\n\n"
-        "CONTEXT CHUNKS:\n"
-        f"{context_str}\n\n"
-        "RULES:\n"
-        "- You MUST cite chunk numbers in your answer (e.g., [1], [2])\n"
-        '- If the answer is not contained in the context, say: "not in provided context"\n'
-        "- Do not hallucinate or use outside knowledge\n"
-        "- Prefer concise and clear answers\n\n"
-        f"USER QUESTION:\n{question}"
+# ----------------------------
+# Prompt builder (IMPORTANT)
+# ----------------------------
+
+
+def build_rag_prompt(question: str, chunks: List[str]) -> List[dict]:
+    context_lines = [f"[{i + 1}] {c}" for i, c in enumerate(chunks)]
+    context = "\n".join(context_lines)
+
+    system = (
+        "You are a precise and grounded assistant.\n"
+        "You MUST only use the provided context.\n"
+        "If the answer is not in the context, say: not in provided context."
     )
 
+    user = f"""
+CONTEXT CHUNKS:
+{context}
 
-async def generate_answer(prompt: str) -> str:
-    """Send the structured RAG prompt to the LLM and return its response."""
-    if not prompt:
-        return "I couldn't find any relevant documents to answer your question."
+RULES:
+- You MUST cite chunk numbers like [1], [2]
+- Do NOT use external knowledge
+- If missing information: say "not in provided context"
 
+QUESTION:
+{question}
+""".strip()
+
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
+
+# ----------------------------
+# LLM call (clean)
+# ----------------------------
+
+
+async def generate_answer(messages: List[dict]) -> str:
     try:
         response = await client.chat.completions.create(
             model=LLM_MODEL,
-            messages=[{"role": "user", "content": prompt}],
+            messages=messages,
             temperature=0.1,
-            max_tokens=1024,
+            max_tokens=800,
         )
+
         content = response.choices[0].message.content
         return content.strip() if content else "not in provided context"
+
     except Exception:
         logger.exception("LLM generation failed")
-        return "Error: The LLM failed to generate a response."
+        return "Error: LLM failed to generate response."
+
+
+# ----------------------------
+# Main pipeline
+# ----------------------------
 
 
 async def generate_reply(
-    conversation_id, messages: List[MessageResponse]
+    conversation_id,
+    messages: List[MessageResponse],
 ) -> MessageResponse:
-    # 1. Extract query
+
     query = extract_query(messages)
+
     if not query:
         return MessageResponse(
             id=uuid4(),
@@ -79,8 +120,8 @@ async def generate_reply(
             sources=[],
         )
 
-    # 2. Retrieve chunks
     retrieved = retrieve_context(query)
+
     if not retrieved:
         return MessageResponse(
             id=uuid4(),
@@ -91,13 +132,13 @@ async def generate_reply(
             sources=[],
         )
 
-    # 3. Build structured RAG prompt
-    prompt = build_rag_prompt(query, [doc["content"] for doc in retrieved])
+    chunks = [doc["content"] for doc in retrieved]
 
-    # 4. Generate answer via LLM
-    reply_text = await generate_answer(prompt)
+    # build messages properly
+    llm_messages = build_rag_prompt(query, chunks)
 
-    # Attach source IDs for provenance
+    reply_text = await generate_answer(llm_messages)
+
     sources = [{"id": doc["id"]} for doc in retrieved]
 
     return MessageResponse(
