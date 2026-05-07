@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 from typing import Dict, List
 from uuid import uuid4
 
+from .chunking import semantic_chunk_text
+
 # Internal store for document chunks
 chunks: Dict[str, dict] = {}
 
@@ -11,15 +13,11 @@ chunks: Dict[str, dict] = {}
 SIMILARITY_THRESHOLD = 0.6
 
 
-def _chunk_text(text: str, chunk_size: int = 300) -> List[str]:
-    return [text[i : i + chunk_size] for i in range(0, len(text), chunk_size)]
-
-
 def add_document(content: str) -> List[dict]:
     """Chunk the document content and store each chunk."""
     doc_id = str(uuid4())
     created_at = datetime.now(timezone.utc)
-    text_chunks = _chunk_text(content)
+    text_chunks = semantic_chunk_text(content)
 
     chunk_results = []
     for i, chunk_content in enumerate(text_chunks):
