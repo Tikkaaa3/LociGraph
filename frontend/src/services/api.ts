@@ -39,7 +39,6 @@ export class ApiError extends Error {
 
 const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  headers: { "Content-Type": "application/json" },
 });
 
 apiClient.interceptors.response.use(
