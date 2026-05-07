@@ -12,22 +12,6 @@ Structure knowledge as an activated memory graph. Upload documents, explore sema
  </p>
 
 ---
-
-## Table of Contents
-
-- [Features](#features)
-- [Architecture](#architecture)
-- [How It Works](#how-it-works)
-- [Tech Stack](#tech-stack)
-- [Directory Structure](#directory-structure)
-- [Setup](#setup)
-- [Usage](#usage)
-- [API Endpoints](#api-endpoints)
-- [OpenRouter Configuration](#openrouter-configuration)
-- [Rate Limits & Known Issues](#rate-limits--known-issues)
-- [Development Notes](#development-notes)
-- [Roadmap](#roadmap)
-
 **LociGraph** is inspired by the _Method of Loci_ (memory palace) — a technique where information is organized spatially and retrieved by walking through
 familiar paths. Instead of flat vector search, LociGraph indexes document chunks as **nodes in a semantic similarity graph**. When you ask a question, it
 "activates" relevant regions of the graph, propagates signals across connected concepts, and visualizes the process in real time.
